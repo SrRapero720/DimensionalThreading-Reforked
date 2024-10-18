@@ -10,17 +10,24 @@ license = "$modlicense"
     displayURL="https://www.curseforge.com/minecraft/mc-mods/dimensional-threads" #optional
     authors="${modauthor}" #optional
     credits="${modcredits}" #optional
-    displayTest="MATCH_VERSION"
     description = '''${mod_description}'''
+
+[[mixins]]
+    config="$modid.$mixin_file_suffix"
+
+[[accessTransformers]]
+    file="META-INF/accesstransformer.cfg"
+
 [[dependencies.${modid}]] #optional
-    modId = "forge"
-    mandatory = true
+    modId = "neoforge"
+    type="required"
     versionRange="${fgrange}"
     ordering = "NONE"
     side = "BOTH"
+
 [[dependencies.${modid}]]
     modId = "minecraft"
-    mandatory = true
+    type="required"
     versionRange="${mcrange}"
     ordering = "NONE"
     side = "BOTH"

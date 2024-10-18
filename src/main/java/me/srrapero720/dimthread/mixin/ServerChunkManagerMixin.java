@@ -8,7 +8,7 @@ import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.chunk.ChunkSource;
-import net.minecraftforge.fml.loading.FMLLoader;
+import net.neoforged.fml.loading.FMLLoader;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;

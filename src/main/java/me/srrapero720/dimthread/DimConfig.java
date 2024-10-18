@@ -1,12 +1,12 @@
 package me.srrapero720.dimthread;
 
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.common.ForgeConfigSpec.*;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.config.ModConfig;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.neoforge.common.ModConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec.*;
 
 public class DimConfig {
-    private static final ForgeConfigSpec SPEC;
+    private static final ModConfigSpec SPEC;
 
     public static final IntValue DEFAULT_GAMERULE_THREADS;
     public static final BooleanValue IGNORE_TICK_CRASH;
@@ -35,7 +35,7 @@ public class DimConfig {
         SPEC = B.build();
     }
 
-    public static void register() {
-        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, SPEC);
+    public static void register(ModContainer container) {
+        container.registerConfig(ModConfig.Type.COMMON, SPEC);
     }
 }
