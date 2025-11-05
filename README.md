@@ -1,3 +1,10 @@
+# NOTICE
+Dimthreads development is currently on-pause, giving all priotity to my other projects
+Hoever, that doesn't mean I will not longer maintain the mod, as soon I got some time I will
+focus on fixing bugs, port to modern MC and support fabric.
+- I accept PR for bug fixes.
+- Bugs reports aren't gonna be ignored, please make a proper bug report (with logs, crash reports, thread dumps, etc) to make way quick the updates
+
 # 🌌 Dimensional Threading ReForked
 Optimises dimension processing assigning them independent threads.
 Having a lot of dimensions on multi-core CPU will increase performance significantly.
