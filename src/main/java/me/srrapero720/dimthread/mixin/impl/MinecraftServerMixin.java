@@ -6,11 +6,14 @@ import me.srrapero720.dimthread.DimConfig;
 import me.srrapero720.dimthread.DimThread;
 import me.srrapero720.dimthread.thread.ThreadPool;
 import me.srrapero720.dimthread.util.CrashInfo;
+import net.minecraft.Util;
 import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.event.EventHooks;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -18,7 +21,9 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
@@ -27,6 +32,9 @@ public abstract class MinecraftServerMixin {
     @Shadow private int tickCount;
     @Shadow private PlayerList playerList;
     @Shadow public abstract Iterable<ServerLevel> getAllLevels();
+    @Shadow public abstract Thread getRunningThread();
+    @Shadow public abstract boolean isStopped();
+    @Shadow private Map<ResourceKey<Level>, long[]> perWorldTickTimes;
 
     @Unique private final AtomicReference<CrashInfo> dimthreads$initialException = new AtomicReference<>();
 
@@ -54,7 +62,17 @@ public abstract class MinecraftServerMixin {
         AtomicReference<CrashInfo> crash = new AtomicReference<>();
         ThreadPool pool = DimThread.getThreadPool((MinecraftServer) (Object) this);
 
+        // Vanilla records these inside the loop emptied above, so '/neoforge tps' reported every dimension as
+        // unloaded. perWorldTickTimes is a plain IdentityHashMap, so the buckets are created here on the
+        // server thread and each worker only writes its own slot.
+        int slot = this.tickCount % 100;
+        for (ServerLevel level : this.getAllLevels()) {
+            this.perWorldTickTimes.computeIfAbsent(level.dimension(), k -> new long[100]);
+        }
+
         pool.execute(this.getAllLevels(), level -> {
+            long tickStart = Util.getNanos();
+            long[] tickTimes = this.perWorldTickTimes.get(level.dimension()); // bucket created above
             DimThread.attach(Thread.currentThread(), level);
 
             if (this.tickCount % 20 == 0) {
@@ -66,14 +84,25 @@ public abstract class MinecraftServerMixin {
             }
 
             DimThread.swapThreadsAndRun(() -> {
-                EventHooks.fireLevelTickPre(level, shouldKeepTicking);
+                // Only the events are serialized, see DimThread#TICK_EVENT_LOCK. The try covers them too: an
+                // exception from a mod handler used to escape into the pool and kill the worker silently.
                 try {
+                    synchronized (DimThread.TICK_EVENT_LOCK) {
+                        EventHooks.fireLevelTickPre(level, shouldKeepTicking);
+                    }
+
                     level.tick(shouldKeepTicking);
+
+                    synchronized (DimThread.TICK_EVENT_LOCK) {
+                        EventHooks.fireLevelTickPost(level, shouldKeepTicking);
+                    }
                 } catch (Throwable throwable) {
                     crash.set(new CrashInfo(level, throwable));
                 }
-                EventHooks.fireLevelTickPost(level, shouldKeepTicking);
             }, level, level.getChunkSource());
+
+            // Wall-clock, so dimensions running in parallel can each report more than the overall MSPT.
+            if (tickTimes != null) tickTimes[slot] = Util.getNanos() - tickStart;
         });
 
         pool.awaitCompletion();
@@ -85,6 +114,29 @@ public abstract class MinecraftServerMixin {
                 crash.get().crash("Exception ticking world (asynchronously)");
             }
         }
+    }
+
+    /**
+     * Mods guard their logic with {@code server.isSameThread()}, which compares against the single
+     * {@code serverThread} field and so fails on our workers. That field cannot be swapped per dimension the
+     * way {@code Level#thread} is, since every worker shares one server, so the check is widened instead.
+     *
+     * @see MinecraftServerMixin#alwaysDeferWorkerTasks(CallbackInfoReturnable)
+     */
+    public boolean isSameThread() {
+        if (Thread.currentThread() == this.getRunningThread()) return true; // vanilla fast path
+        // No isActive() check: this is far too hot to lock a map, and a worker only runs level-tick work.
+        return DimThread.owns(Thread.currentThread());
+    }
+
+    /**
+     * Vanilla routes scheduling through {@code isSameThread()}, so widening it above would make
+     * {@code server.execute(task)} run inline on the worker and break {@code EntityMixin}'s deferral.
+     * {@code !isStopped()} is what vanilla computes for any thread that is not the server thread.
+     */
+    @Inject(method = "scheduleExecutables", at = @At("HEAD"), cancellable = true)
+    private void alwaysDeferWorkerTasks(CallbackInfoReturnable<Boolean> cir) {
+        if (DimThread.owns(Thread.currentThread())) cir.setReturnValue(!this.isStopped());
     }
 
     /**

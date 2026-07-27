@@ -26,7 +26,8 @@ ImmersivePortals and many other mods.
 - ``/gamerule dimthread_skip_crashing true/false``; skip crashes on dimensions
 
 **Know incompatibilities**
-- ``AppliedEnergistics2``: dimensional features doesn't works (no crashes)
+- ``AppliedEnergistics2``: dimensional features doesn't works (no crashes). Grids spanning dimensions stay unsafe, block entities in different dimensions touch one grid while both levels tick
+- Mods that only guarded with ``isSameThread()`` no longer crash, but their collections are now reachable from several dimension threads. ``ModernIndustrialization`` multiblock tracking is one case
 
 ## 📱 Contact and Support
 You can contact me on my Discord Server or the mod's Github Repository for support...

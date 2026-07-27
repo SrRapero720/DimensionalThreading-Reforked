@@ -23,6 +23,12 @@ public class DimThread {
     public static final ServerManager MANAGER = new ServerManager();
     public static final Logger LOGGER = LogManager.getLogger(MOD_ID);
 
+    /**
+     * Serializes LevelTickEvent dispatch. Mods use that event to drive state shared between dimensions
+     * (AE2 grids, MI pipe networks) and vanilla only ever fires it for one level at a time.
+     */
+    public static final Object TICK_EVENT_LOCK = new Object();
+
     public DimThread(IEventBus bus, ModContainer container) {
         DimConfig.register(container);
     }
@@ -40,7 +46,14 @@ public class DimThread {
         return FMLLoader.getLoadingModList().getModFileById(modid) != null;
     }
 
-    public static synchronized void swapThreadsAndRun(Runnable task, Object... threadedObjects) {
+    /**
+     * Points each object's main thread at the calling worker for the duration of {@code task}.
+     * <p>
+     * Not {@code synchronized}: on a static method that monitor is {@code DimThread.class}, and holding it
+     * across {@code task.run()} serialized every dimension tick. It is not needed either, since each caller
+     * only passes objects owned by the dimension it is ticking.
+     */
+    public static void swapThreadsAndRun(Runnable task, Object... threadedObjects) {
         Thread currentThread = Thread.currentThread();
         Thread[] oldThreads = new Thread[threadedObjects.length];
 
@@ -49,10 +62,13 @@ public class DimThread {
             ((IMutableMainThread) threadedObjects[i]).dimThreads$setMainThread(currentThread);
         }
 
-        task.run();
-
-        for (int i = 0; i < oldThreads.length; i++) {
-            ((IMutableMainThread) threadedObjects[i]).dimThreads$setMainThread(oldThreads[i]);
+        try {
+            task.run();
+        } finally {
+            // Restore even if the task throws, or the level stays pinned to a worker that stopped ticking it.
+            for (int i = 0; i < oldThreads.length; i++) {
+                ((IMutableMainThread) threadedObjects[i]).dimThreads$setMainThread(oldThreads[i]);
+            }
         }
     }
 
