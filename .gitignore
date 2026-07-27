@@ -7,6 +7,13 @@
 
 # IntelliJ
 out/
+
+# Eclipse / NeoGradle generated run configurations
+.eclipse/
+.classpath
+.project
+.settings/
+bin/
 # mpeltonen/sbt-idea plugin
 .idea_modules/
 
